@@ -1406,6 +1406,8 @@ type StateExpiryStorageExpiredTop struct {
 	ContractAddress string `protobuf:"bytes,2,opt,name=contract_address,json=contractAddress,proto3" json:"contract_address,omitempty"`
 	// Number of expired storage slots for this contract (not accessed in last 365 days)
 	ExpiredSlots uint64 `protobuf:"varint,3,opt,name=expired_slots,json=expiredSlots,proto3" json:"expired_slots,omitempty"`
+	// Contract name (optional, resolved from Sourcify if available)
+	ContractName *string `protobuf:"bytes,4,opt,name=contract_name,json=contractName,proto3,oneof" json:"contract_name,omitempty"`
 }
 
 func (x *StateExpiryStorageExpiredTop) Reset() {
@@ -1459,6 +1461,13 @@ func (x *StateExpiryStorageExpiredTop) GetExpiredSlots() uint64 {
 		return x.ExpiredSlots
 	}
 	return 0
+}
+
+func (x *StateExpiryStorageExpiredTop) GetContractName() string {
+	if x != nil && x.ContractName != nil {
+		return *x.ContractName
+	}
+	return ""
 }
 
 // StateExpiryStorageTopResponse is the v1 API response for top contracts by total storage slots.
@@ -1530,6 +1539,8 @@ type StateExpiryStorageTop struct {
 	ContractAddress string `protobuf:"bytes,2,opt,name=contract_address,json=contractAddress,proto3" json:"contract_address,omitempty"`
 	// Total number of storage slots for this contract
 	TotalStorageSlots uint64 `protobuf:"varint,3,opt,name=total_storage_slots,json=totalStorageSlots,proto3" json:"total_storage_slots,omitempty"`
+	// Contract name (optional, resolved from Sourcify if available)
+	ContractName *string `protobuf:"bytes,4,opt,name=contract_name,json=contractName,proto3,oneof" json:"contract_name,omitempty"`
 }
 
 func (x *StateExpiryStorageTop) Reset() {
@@ -1583,6 +1594,13 @@ func (x *StateExpiryStorageTop) GetTotalStorageSlots() uint64 {
 		return x.TotalStorageSlots
 	}
 	return 0
+}
+
+func (x *StateExpiryStorageTop) GetContractName() string {
+	if x != nil && x.ContractName != nil {
+		return *x.ContractName
+	}
+	return ""
 }
 
 // ListBeaconSlotMevRelayResponse is the v1 API response for MEV relay bid counts by slot.

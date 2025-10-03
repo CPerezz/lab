@@ -1,10 +1,13 @@
 package rest
 
 import (
+	"context"
 	"net/http"
 	"strconv"
+	"sync"
 
 	apiv1 "github.com/ethpandaops/lab/backend/pkg/api/v1/proto"
+	configpb "github.com/ethpandaops/lab/backend/pkg/server/proto/config"
 	cbtproto "github.com/ethpandaops/xatu-cbt/pkg/proto/clickhouse"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
@@ -343,13 +346,14 @@ func (r *PublicRouter) handleStateExpiryStorageExpiredTop(w http.ResponseWriter,
 		return
 	}
 
-	// 3. TRANSFORM CBT types → Public API types
+	// 3. TRANSFORM CBT types → Public API types and enrich with contract names
 	items := make([]*apiv1.StateExpiryStorageExpiredTop, 0, len(grpcResp.FctAddressStorageSlotExpiredTop_100ByContract))
 
-	for _, cbtItem := range grpcResp.FctAddressStorageSlotExpiredTop_100ByContract {
-		apiItem := transformCBTToAPIStateExpiryStorageExpiredTop(cbtItem)
-		items = append(items, apiItem)
-	}
+	// Get chain ID for this network from config
+	chainID := r.getChainIDForNetwork(ctx, network)
+
+	// Enrich items with contract names concurrently
+	items = r.enrichWithContractNames(ctx, chainID, grpcResp.FctAddressStorageSlotExpiredTop_100ByContract, transformCBTToAPIStateExpiryStorageExpiredTop)
 
 	// Build applied filters map for metadata (empty for this endpoint)
 	appliedFilters := make(map[string]string)
@@ -413,13 +417,14 @@ func (r *PublicRouter) handleStateExpiryStorageTop(w http.ResponseWriter, req *h
 		return
 	}
 
-	// 3. TRANSFORM CBT types → Public API types
+	// 3. TRANSFORM CBT types → Public API types and enrich with contract names
 	items := make([]*apiv1.StateExpiryStorageTop, 0, len(grpcResp.FctAddressStorageSlotTop_100ByContract))
 
-	for _, cbtItem := range grpcResp.FctAddressStorageSlotTop_100ByContract {
-		apiItem := transformCBTToAPIStateExpiryStorageTop(cbtItem)
-		items = append(items, apiItem)
-	}
+	// Get chain ID for this network from config
+	chainID := r.getChainIDForNetwork(ctx, network)
+
+	// Enrich items with contract names concurrently
+	items = r.enrichWithContractNamesForTop(ctx, chainID, grpcResp.FctAddressStorageSlotTop_100ByContract, transformCBTToAPIStateExpiryStorageTop)
 
 	// Build applied filters map for metadata (empty for this endpoint)
 	appliedFilters := make(map[string]string)
@@ -578,4 +583,107 @@ func transformCBTToAPIStateExpiryBlock(cbt *cbtproto.FctBlock) *apiv1.StateExpir
 	return &apiv1.StateExpiryBlock{
 		BlockNumber: cbt.ExecutionPayloadBlockNumber,
 	}
+}
+
+// enrichWithContractNames enriches StateExpiryStorageExpiredTop items with contract names from Sourcify.
+// This function fetches contract names concurrently for all addresses.
+func (r *PublicRouter) enrichWithContractNames(
+	ctx context.Context,
+	chainID int64,
+	cbtItems []*cbtproto.FctAddressStorageSlotExpiredTop100ByContract,
+	transform func(*cbtproto.FctAddressStorageSlotExpiredTop100ByContract) *apiv1.StateExpiryStorageExpiredTop,
+) []*apiv1.StateExpiryStorageExpiredTop {
+	items := make([]*apiv1.StateExpiryStorageExpiredTop, len(cbtItems))
+	var wg sync.WaitGroup
+
+	// Process each item concurrently
+	for i, cbtItem := range cbtItems {
+		wg.Add(1)
+		go func(index int, item *cbtproto.FctAddressStorageSlotExpiredTop100ByContract) {
+			defer wg.Done()
+
+			// Transform to API type
+			apiItem := transform(item)
+
+			// Enrich with contract name from Sourcify
+			if r.sourcifyClient != nil && apiItem.ContractAddress != "" {
+				contractName := r.sourcifyClient.GetContractName(ctx, chainID, apiItem.ContractAddress)
+				if contractName != "" {
+					apiItem.ContractName = &contractName
+				}
+			}
+
+			items[index] = apiItem
+		}(i, cbtItem)
+	}
+
+	wg.Wait()
+	return items
+}
+
+// enrichWithContractNamesForTop enriches StateExpiryStorageTop items with contract names from Sourcify.
+// This function fetches contract names concurrently for all addresses.
+func (r *PublicRouter) enrichWithContractNamesForTop(
+	ctx context.Context,
+	chainID int64,
+	cbtItems []*cbtproto.FctAddressStorageSlotTop100ByContract,
+	transform func(*cbtproto.FctAddressStorageSlotTop100ByContract) *apiv1.StateExpiryStorageTop,
+) []*apiv1.StateExpiryStorageTop {
+	items := make([]*apiv1.StateExpiryStorageTop, len(cbtItems))
+	var wg sync.WaitGroup
+
+	// Process each item concurrently
+	for i, cbtItem := range cbtItems {
+		wg.Add(1)
+		go func(index int, item *cbtproto.FctAddressStorageSlotTop100ByContract) {
+			defer wg.Done()
+
+			// Transform to API type
+			apiItem := transform(item)
+
+			// Enrich with contract name from Sourcify
+			if r.sourcifyClient != nil && apiItem.ContractAddress != "" {
+				contractName := r.sourcifyClient.GetContractName(ctx, chainID, apiItem.ContractAddress)
+				if contractName != "" {
+					apiItem.ContractName = &contractName
+				}
+			}
+
+			items[index] = apiItem
+		}(i, cbtItem)
+	}
+
+	wg.Wait()
+	return items
+}
+
+// getChainIDForNetwork retrieves the chain ID for a given network name from the config service.
+// Returns 1 (mainnet) as default if the network is not found or an error occurs.
+func (r *PublicRouter) getChainIDForNetwork(ctx context.Context, network string) int64 {
+	// Call config service to get network configuration
+	config, err := r.configClient.GetConfig(ctx, &configpb.GetConfigRequest{})
+	if err != nil {
+		r.log.WithError(err).WithField("network", network).Debug("Failed to get config for chain ID lookup, defaulting to mainnet")
+		return 1 // Default to mainnet
+	}
+
+	// Check if ethereum config exists
+	if config.Config == nil || config.Config.Ethereum == nil || config.Config.Ethereum.Networks == nil {
+		r.log.WithField("network", network).Debug("No ethereum config found, defaulting to mainnet")
+		return 1
+	}
+
+	// Look up the network
+	networkConfig, ok := config.Config.Ethereum.Networks[network]
+	if !ok {
+		r.log.WithField("network", network).Debug("Network not found in config, defaulting to mainnet")
+		return 1
+	}
+
+	r.log.WithFields(logrus.Fields{
+		"network":  network,
+		"chain_id": networkConfig.ChainId,
+	}).Debug("Resolved chain ID for network")
+
+	return networkConfig.ChainId
 }

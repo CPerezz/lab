@@ -207,6 +207,8 @@ message StateExpiryStorageExpiredTop {
   string contract_address = 2;
   // Number of expired storage slots for this contract (not accessed in last 365 days)
   uint64 expired_slots = 3;
+  // Contract name (optional, resolved from Sourcify if available)
+  optional string contract_name = 4;
 }
 
 // StateExpiryStorageTopResponse is the v1 API response for top contracts by total storage slots.
@@ -224,6 +226,8 @@ message StateExpiryStorageTop {
   string contract_address = 2;
   // Total number of storage slots for this contract
   uint64 total_storage_slots = 3;
+  // Contract name (optional, resolved from Sourcify if available)
+  optional string contract_name = 4;
 }
 
 // ListBeaconSlotMevRelayResponse is the v1 API response for MEV relay bid counts by slot.

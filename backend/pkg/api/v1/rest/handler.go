@@ -13,6 +13,7 @@ import (
 	"github.com/ethpandaops/lab/backend/pkg/api/v1/rest/middleware"
 	configpb "github.com/ethpandaops/lab/backend/pkg/server/proto/config"
 	xatu_cbt_pb "github.com/ethpandaops/lab/backend/pkg/server/proto/xatu_cbt"
+	"github.com/ethpandaops/lab/backend/pkg/services/sourcify"
 	cbtproto "github.com/ethpandaops/xatu-cbt/pkg/proto/clickhouse"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
@@ -27,9 +28,10 @@ const (
 
 // PublicRouter handles public REST API v1 requests for all Lab endpoints.
 type PublicRouter struct {
-	log           logrus.FieldLogger
-	configClient  configpb.ConfigServiceClient
-	xatuCBTClient xatu_cbt_pb.XatuCBTClient
+	log            logrus.FieldLogger
+	configClient   configpb.ConfigServiceClient
+	xatuCBTClient  xatu_cbt_pb.XatuCBTClient
+	sourcifyClient *sourcify.Client
 }
 
 // NewPublicRouter creates a new public REST router for API v1.
@@ -37,11 +39,13 @@ func NewPublicRouter(
 	log logrus.FieldLogger,
 	configClient configpb.ConfigServiceClient,
 	xatuCBTClient xatu_cbt_pb.XatuCBTClient,
+	sourcifyClient *sourcify.Client,
 ) *PublicRouter {
 	return &PublicRouter{
-		log:           log.WithField("component", "public_rest_router_v1"),
-		configClient:  configClient,
-		xatuCBTClient: xatuCBTClient,
+		log:            log.WithField("component", "public_rest_router_v1"),
+		configClient:   configClient,
+		xatuCBTClient:  xatuCBTClient,
+		sourcifyClient: sourcifyClient,
 	}
 }
 

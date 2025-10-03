@@ -19,6 +19,7 @@ import (
 	"github.com/ethpandaops/lab/backend/pkg/internal/lab/logger"
 	"github.com/ethpandaops/lab/backend/pkg/internal/lab/metrics"
 	"github.com/ethpandaops/lab/backend/pkg/internal/lab/storage"
+	"github.com/ethpandaops/lab/backend/pkg/services/sourcify"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 	"github.com/sirupsen/logrus"
@@ -309,7 +310,10 @@ func (s *Service) initializeServices(ctx context.Context) error {
 	s.beaconSlotsClient = beaconslotspb.NewBeaconSlotsClient(conn)
 	s.xatuCBTClient = xatu_cbt_pb.NewXatuCBTClient(conn)
 	s.configClient = configpb.NewConfigServiceClient(conn)
-	s.publicV1Router = v1rest.NewPublicRouter(s.log, s.configClient, s.xatuCBTClient)
+
+	// Initialize Sourcify client for contract name resolution
+	sourcifyClient := sourcify.NewClient(s.log, nil)
+	s.publicV1Router = v1rest.NewPublicRouter(s.log, s.configClient, s.xatuCBTClient, sourcifyClient)
 
 	return nil
 }
